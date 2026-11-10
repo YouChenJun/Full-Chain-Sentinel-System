@@ -434,36 +434,18 @@ export class CodeMonitorManager {
 		return (await client.listBranches()).map((branch) => branch.name);
 	}
 
-	/**
-	 * Resolve configured branches. A repository that still uses `master` is the
-	 * common case behind "Branch not found" during a bulk import, so a missing
-	 * `main` falls back to the repository's actual default branch.
-	 */
+	/** Resolve exactly the selected branches; an invalid explicit choice must fail. */
 	private async resolveBranches(
 		client: GithubClient,
 		branches: string[],
 		kept: (branch: string) => string | undefined,
-		fallbackDefault: boolean,
 	): Promise<{ branches: string[]; baselines: Record<string, string> }> {
 		const resolved: string[] = [];
 		const baselines: Record<string, string> = {};
 		for (const branch of branches) {
-			try {
-				const saved = kept(branch);
-				baselines[branch] = saved || (await client.getBranch(branch)).sha;
-				if (!resolved.includes(branch)) resolved.push(branch);
-			} catch (error) {
-				if (fallbackDefault && branch === "main" && error instanceof GithubApiError && error.status === 404) {
-					const fallback = (await client.getRepo()).defaultBranch;
-					if (fallback && fallback !== "main" && !resolved.includes(fallback)) {
-						const saved = kept(fallback);
-						baselines[fallback] = saved || (await client.getBranch(fallback)).sha;
-						resolved.push(fallback);
-						continue;
-					}
-				}
-				throw error;
-			}
+			const saved = kept(branch);
+			baselines[branch] = saved || (await client.getBranch(branch)).sha;
+			resolved.push(branch);
 		}
 		return { branches: resolved, baselines };
 	}
@@ -472,7 +454,8 @@ export class CodeMonitorManager {
 		const project = this.hooks.project(input.projectId);
 		if (!project) throw new Error("项目不存在，请重新选择项目");
 		const ref = parseGithubRepoUrl(input.url, input.apiBaseUrl);
-		const branches = cleanBranches(input.branches);
+		const requestedBranches =
+			input.branches.length > 0 ? cleanBranches(input.branches) : ref.branch ? cleanBranches([ref.branch]) : null;
 		const token = input.token?.trim() ?? "";
 		if (/\s/.test(token)) throw new Error("访问令牌不能包含空白字符");
 		const schedule = resolveSchedule(input);
@@ -482,12 +465,8 @@ export class CodeMonitorManager {
 			token,
 			this.hooks.fetchImpl ?? createProjectGithubFetch(this.agentDir, project.id),
 		);
-		const { branches: resolvedBranches, baselines } = await this.resolveBranches(
-			client,
-			branches,
-			() => undefined,
-			true,
-		);
+		const branches = requestedBranches ?? cleanBranches([(await client.getRepo()).defaultBranch]);
+		const { branches: resolvedBranches, baselines } = await this.resolveBranches(client, branches, () => undefined);
 		const stored = this.store.createMonitor({
 			projectId: project.id,
 			projectName: project.name,
@@ -520,7 +499,8 @@ export class CodeMonitorManager {
 		const project = this.hooks.project(input.projectId || current.projectId);
 		if (!project) throw new Error("项目不存在，请重新选择项目");
 		const ref = parseGithubRepoUrl(input.url, input.apiBaseUrl);
-		const branches = cleanBranches(input.branches);
+		const requestedBranches =
+			input.branches.length > 0 ? cleanBranches(input.branches) : ref.branch ? cleanBranches([ref.branch]) : null;
 		const repoChanged =
 			ref.host !== current.host ||
 			ref.owner !== current.owner ||
@@ -538,11 +518,9 @@ export class CodeMonitorManager {
 			token,
 			this.hooks.fetchImpl ?? createProjectGithubFetch(this.agentDir, project.id),
 		);
-		const { branches: resolvedBranches, baselines } = await this.resolveBranches(
-			client,
-			branches,
-			(branch) => (repoChanged ? undefined : current.baselines[branch]),
-			true,
+		const branches = requestedBranches ?? cleanBranches([(await client.getRepo()).defaultBranch]);
+		const { branches: resolvedBranches, baselines } = await this.resolveBranches(client, branches, (branch) =>
+			repoChanged ? undefined : current.baselines[branch],
 		);
 		this.store.updateMonitor(id, {
 			name: input.name?.trim() || `${ref.owner}/${ref.repo}`,

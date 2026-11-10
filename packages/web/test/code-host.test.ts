@@ -39,6 +39,28 @@ function commit(overrides: Partial<GithubCommitDetail> = {}): GithubCommitDetail
 }
 
 describe("parseGithubRepoUrl", () => {
+	it.each([
+		["https://github.com/YouChenJun/Full-Chain-Sentinel-System/tree/main", "main"],
+		["https://github.com/acme/app/tree/develop/", "develop"],
+		["https://github.com/acme/app/tree/release/1.x?tab=readme#readme", "release/1.x"],
+		["https://github.com/acme/app/tree/release%2F1.x", "release/1.x"],
+		["https://ghe.example.com/acme/app/tree/feature/%E4%B8%AD%E6%96%87", "feature/中文"],
+	])("retains the branch from %s", (url, branch) => {
+		const ref = parseGithubRepoUrl(url);
+		expect(ref.branch).toBe(branch);
+		expect(ref.repoUrl).not.toContain("/tree/");
+	});
+
+	it("does not infer a branch for repository or non-tree URLs", () => {
+		for (const suffix of ["", ".git", "/issues", "/pull/12"]) {
+			expect(parseGithubRepoUrl(`https://github.com/acme/app${suffix}`).branch).toBeUndefined();
+		}
+	});
+
+	it.each(["tree", "tree/", "tree/%ZZ"])("rejects malformed branch links: %s", (suffix) => {
+		expect(() => parseGithubRepoUrl(`https://github.com/acme/app/${suffix}`)).toThrow();
+	});
+
 	it("parses github.com HTTPS URLs and strips .git", () => {
 		const ref = parseGithubRepoUrl("https://github.com/acme/app.git");
 		expect(ref).toMatchObject({

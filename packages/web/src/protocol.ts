@@ -1271,6 +1271,7 @@ export interface SentinelCodeMonitorInput {
 	token?: string;
 	/** Override the derived REST base, e.g. `https://ghe.example.com/api/v3`. */
 	apiBaseUrl?: string;
+	/** Empty: infer the URL branch, or resolve the repository default branch. */
 	branches: string[];
 	intervalMinutes?: number;
 	/** Omitted on update keeps the stored strategy. */

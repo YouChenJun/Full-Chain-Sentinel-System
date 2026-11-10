@@ -4,8 +4,9 @@
  * The page is project-scoped: a monitor belongs to the project whose container
  * will reproduce its findings, so switching projects switches the list. Adding a
  * monitor walks the operator through the only two things the server needs — a
- * Git address and the branches to watch — and fetches the branch list first, so
- * a typo surfaces before anything is stored.
+ * Git address and the branches to watch — and infers an explicit branch from a
+ * pasted tree URL. Repository-root addresses use the actual default branch when
+ * the monitor is created.
  */
 
 import {
@@ -54,6 +55,7 @@ import type { TableColumnsType } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CODE_VULN_TAGS, type CodeVulnTag } from "../../../src/code-vuln-tags.ts";
 import { DEFAULT_CRON_EXPRESSION, nextCronOccurrences, validateCronExpression } from "../../../src/cron.ts";
+import { monitorBranchesForUrl } from "../code-monitor-input.ts";
 import { getLanguage, t } from "../i18n.ts";
 import type { DetailLoadState } from "../detail-request.ts";
 import { DetailLoading } from "../ui/DetailLoading.tsx";
@@ -578,7 +580,7 @@ export function CodeIntelPage({
 }: CodeIntelPageProps) {
 	const screens = Grid.useBreakpoint();
 	const [editor, setEditor] = useState<EditorState | null>(null);
-	/** Create mode: the textarea, and per-address branch choices (default main). */
+	/** Create mode: the textarea, and per-address branch overrides. */
 	const [bulkUrls, setBulkUrls] = useState("");
 	const [repoBranches, setRepoBranches] = useState<Record<string, string[]>>({});
 	const [branchOptions, setBranchOptions] = useState<Record<string, string[]>>({});
@@ -703,7 +705,8 @@ export function CodeIntelPage({
 		const lastPage = Math.max(1, Math.ceil(activity.total / activityPageSize));
 		setActivityPage((page) => Math.min(page, lastPage));
 	}, [activity, activityPageSize]);
-	const branchesFor = (url: string): string[] => repoBranches[url] ?? ["main"];
+	const branchesFor = (url: string): string[] => monitorBranchesForUrl(url, repoBranches[url]);
+	const branchSelectionMissing = (url: string): boolean => repoBranches[url]?.length === 0;
 
 	// Selection follows the visible rows: a project switch or a deleted monitor
 	// must not leave an invisible id selected for the next batch check.
@@ -777,17 +780,6 @@ export function CodeIntelPage({
 			} else {
 				const branches = probe.branches ?? [];
 				setBranchOptions((prev) => ({ ...prev, [url]: branches }));
-				// Keep main unless the repository does not have it; in that case the
-				// repository's first listed branch is the least surprising default.
-				if (mode === "create") {
-					setRepoBranches((prev) => {
-						const current = prev[url] ?? ["main"];
-						if (current.length === 1 && current[0] === "main" && branches.length > 0 && !branches.includes("main")) {
-							return { ...prev, [url]: [branches[0] ?? "main"] };
-						}
-						return prev;
-					});
-				}
 			}
 			setProbeProgress((prev) => (prev ? { ...prev, done: prev.done + 1 } : prev));
 			if (probeQueue.current.length > 0) {
@@ -952,7 +944,7 @@ export function CodeIntelPage({
 		? !!editorCronError
 			? false
 			: editor.mode === "create"
-				? createRepos.length > 0 && createRepos.every((url) => branchesFor(url).length > 0)
+				? createRepos.length > 0 && createRepos.every((url) => !branchSelectionMissing(url))
 				: Boolean(editor.url.trim()) && editor.branches.length > 0
 		: false;
 	const dispatchTargetCount = dispatchAll ? rows.length : selectedIds.length;
@@ -2186,7 +2178,7 @@ export function CodeIntelPage({
 							extra={
 								editor.mode === "create"
 									? t(
-											"每行一个 Git 地址，默认监控 main 分支，可获取分支后手动挑选；多个仓库共用下面的令牌与 API Base URL。",
+											"每行一个 Git 地址；/tree/ 后的分支自动选中，未指定时使用仓库默认分支。多个仓库共用下面的令牌与 API Base URL。",
 										)
 									: t("支持 GitHub、GitHub Enterprise 的 HTTPS / SSH 地址，或 owner/repo 形式。")
 							}
@@ -2242,7 +2234,7 @@ export function CodeIntelPage({
 							required
 							extra={
 								editor.mode === "create"
-									? t("每个仓库默认 main；点击「获取分支」后可逐个挑选，也可直接输入分支名。")
+									? t("自动使用链接中的分支；未指定时在创建时查询仓库默认分支。可直接输入其他分支，或获取分支后改选。")
 									: t("注册时以各分支当前 HEAD 为基线；可获取分支后重新挑选。")
 							}
 						>
@@ -2263,7 +2255,7 @@ export function CodeIntelPage({
 													total: probeProgress.total,
 												})
 											: editor.mode === "create"
-												? t("默认 main")
+												? t("链接分支 / 仓库默认分支")
 												: null}
 									</Text>
 								</Space>
@@ -2280,14 +2272,14 @@ export function CodeIntelPage({
 													<Select
 														mode="tags"
 														aria-label={`${t("监控分支")} ${url}`}
-														status={branchesFor(url).length === 0 ? "error" : undefined}
+														status={branchSelectionMissing(url) ? "error" : undefined}
 														className="code-intel-repo-branches"
 														value={branchesFor(url)}
 														options={(branchOptions[url] ?? []).map((branch) => ({
 															value: branch,
 															label: branch,
 														}))}
-														placeholder="main"
+														placeholder={t("仓库默认分支（创建时解析）")}
 														onChange={(value) => setRepoBranches((prev) => ({ ...prev, [url]: value }))}
 														optionFilterProp="label"
 													/>
@@ -2338,7 +2330,7 @@ export function CodeIntelPage({
 						</Form.Item>
 						{(
 							editor.mode === "create"
-								? createRepos.some((url) => branchesFor(url).length === 0)
+								? createRepos.some(branchSelectionMissing)
 								: editor.branches.length === 0
 						) ? (
 							<Alert className="code-intel-editor-hint" type="error" showIcon message={t("请至少选择一个监控分支")} />

@@ -1033,6 +1033,7 @@ export interface SentinelCodeMonitorInput {
 	name?: string;
 	token?: string;
 	apiBaseUrl?: string;
+	/** Empty: infer the URL branch, or resolve the repository default branch. */
 	branches: string[];
 	intervalMinutes?: number;
 	scheduleKind?: SentinelCodeScheduleKind;

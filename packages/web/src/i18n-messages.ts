@@ -144,11 +144,12 @@ export const EN_MESSAGES: Record<string, string> = {
 	检查所选: "Check selected",
 	"检查所选（{n}）": "Check selected ({n})",
 	仓库地址: "Repository addresses",
-	"每行一个 Git 地址，默认监控 main 分支，可获取分支后手动挑选；多个仓库共用下面的令牌与 API Base URL。":
-		"One Git address per line. Each repository watches main by default; load branches to pick others. Multiple repositories share the token and API base URL below.",
-	"每个仓库默认 main；点击「获取分支」后可逐个挑选，也可直接输入分支名。":
-		"Each repository defaults to main. Load branches to choose per repository, or type a branch name directly.",
-	"默认 main": "main by default",
+	"每行一个 Git 地址；/tree/ 后的分支自动选中，未指定时使用仓库默认分支。多个仓库共用下面的令牌与 API Base URL。":
+		"One Git address per line. Branches after /tree/ are selected automatically; otherwise the repository default branch is used. Repositories share the token and API base URL below.",
+	"自动使用链接中的分支；未指定时在创建时查询仓库默认分支。可直接输入其他分支，或获取分支后改选。":
+		"Use the branch in the URL, or resolve the repository default branch on creation. Type other branches or load branches to change the selection.",
+	"链接分支 / 仓库默认分支": "URL branch / repository default branch",
+	"仓库默认分支（创建时解析）": "Repository default branch (resolved on creation)",
 	先在上方输入仓库地址: "Enter repository addresses above first",
 	"点击左侧按钮获取分支，或直接输入分支名": "Load branches with the button on the left, or type a branch name",
 	获取分支失败: "Failed to load branches",

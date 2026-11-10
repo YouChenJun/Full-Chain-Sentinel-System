@@ -1,4 +1,5 @@
 name: Release
+run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release == false && format('仅构建 · {0}', github.ref_name) || format('发布 · {0}', inputs.tag || github.ref_name) }}
 
 # Publishes the five supported console binaries and the DroidBridge APK:
 #
@@ -28,9 +29,14 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag, for example v0.1.0
+        description: 发布标签；仅构建时填写唯一构建标识，例如 build-20261110
         required: true
         type: string
+      publish_release:
+        description: 发布 GitHub Release；关闭时仅上传可下载构建产物
+        required: false
+        default: true
+        type: boolean
       prerelease:
         description: Publish as a pre-release
         required: false
@@ -262,6 +268,7 @@ jobs:
 
   release:
     name: Publish the release
+    if: ${{ github.event_name == 'push' || inputs.publish_release }}
     needs:
       - binary
       - windows
